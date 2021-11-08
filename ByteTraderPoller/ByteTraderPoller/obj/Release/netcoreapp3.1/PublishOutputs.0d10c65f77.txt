@@ -1,0 +1,17 @@
+E:\ByteTraderProduction\ByteTraderPollerPublish\nlog.config
+E:\ByteTraderProduction\ByteTraderPollerPublish\ByteTraderPoller.exe
+E:\ByteTraderProduction\ByteTraderPollerPublish\ByteTraderPoller.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\ByteTraderPoller.deps.json
+E:\ByteTraderProduction\ByteTraderPollerPublish\ByteTraderPoller.runtimeconfig.json
+E:\ByteTraderProduction\ByteTraderPollerPublish\ByteTraderPoller.pdb
+E:\ByteTraderProduction\ByteTraderPollerPublish\Dapper.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\Newtonsoft.Json.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\NLog.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\NLog.Extensions.Logging.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\NLog.Web.AspNetCore.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\System.Data.SqlClient.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\runtimes\win-arm64\native\sni.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\runtimes\win-x64\native\sni.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\runtimes\win-x86\native\sni.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\runtimes\unix\lib\netcoreapp2.1\System.Data.SqlClient.dll
+E:\ByteTraderProduction\ByteTraderPollerPublish\runtimes\win\lib\netcoreapp2.1\System.Data.SqlClient.dll
