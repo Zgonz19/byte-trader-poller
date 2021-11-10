@@ -62,6 +62,7 @@ namespace ByteTraderPoller.Services.AssetMonitoring
                         TrackerTasks.Add(task);
                         ActiveTrackers.Add(tracker);
                     }
+                    maxId = CheckAssets.Max(e => e.TrackerId);
                 }
                 if (count >= 4)
                 {
