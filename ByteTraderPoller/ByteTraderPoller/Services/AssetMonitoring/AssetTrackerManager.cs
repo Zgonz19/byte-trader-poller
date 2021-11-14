@@ -30,7 +30,7 @@ namespace ByteTraderPoller.Services.AssetMonitoring
 
             var accessTokenObj = JsonConvert.DeserializeObject<AccessToken>(accessToken.AttributeValue);
             ApiWrapper.InitializeApiWrapper(accessTokenObj, apiKey.AttributeValue);
-
+            
             var assets = await Repo.GetAssetTrackerSetup();
             var maxId = assets.Max(e => e.TrackerId);
             var expiredAssets = assets.Where(e => e.Expiration <= DateTime.Now).ToList();

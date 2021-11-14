@@ -1,4 +1,5 @@
-﻿using ByteTraderPoller.Tables;
+﻿using ByteTraderPoller.Services.QuoteStreaming;
+using ByteTraderPoller.Tables;
 using Dapper;
 using NLog;
 using NLog.Web;
@@ -35,6 +36,61 @@ namespace ByteTraderPoller.Connections
             }
             return appUsers;
         }
+
+        public async Task InsertRealtimeQuote(content content, double timestamp)
+        {
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("@Timestamp", timestamp);
+                parameters.Add("@Symbol", content.key);
+                parameters.Add("@key", content.key);
+                parameters.Add("@delayed", content.delayed);
+                parameters.Add("@assetMainType", content.assetMainType);
+                parameters.Add("@cusip", content.cusip);
+                parameters.Add("@BidPrice", content.BidPrice);
+                parameters.Add("@AskPrice", content.AskPrice);
+                parameters.Add("@LastPrice", content.LastPrice);
+                parameters.Add("@BidSize", content.BidSize);
+                parameters.Add("@AskSize", content.AskSize);
+                parameters.Add("@AskId", content.AskId);
+                parameters.Add("@BidId", content.BidId);
+                parameters.Add("@TotalVolume", content.TotalVolume);
+                parameters.Add("@LastSize", content.LastSize);
+                parameters.Add("@TradeTime", content.TradeTime);
+                parameters.Add("@QuoteTime", content.QuoteTime);
+                parameters.Add("@HighPrice", content.HighPrice);
+                parameters.Add("@LowPrice", content.LowPrice);
+                parameters.Add("@BidTick", content.BidTick);
+                parameters.Add("@ClosePrice", content.ClosePrice);
+                parameters.Add("@QuoteTimeMs", content.QuoteTimeMs);
+                parameters.Add("@TradeTimeMs", content.TradeTimeMs);
+                parameters.Add("@DateTimeKey", DateTimeOffset.FromUnixTimeMilliseconds((long)timestamp).DateTime);
+                
+                var sqlCommand = $"INSERT INTO dbo.RealtimeQuotes (Timestamp, Symbol, [key], delayed, assetMainType, cusip, BidPrice, AskPrice, LastPrice, BidSize, AskSize, AskId, BidId, TotalVolume, LastSize, TradeTime, QuoteTime, HighPrice, LowPrice, BidTick, ClosePrice, QuoteTimeMs, TradeTimeMs, DateTimeKey) " +
+                    $"VALUES (@Timestamp, @Symbol, @key, @delayed, @assetMainType, @cusip, @BidPrice, @AskPrice, @LastPrice, @BidSize, @AskSize, @AskId, @BidId, @TotalVolume, @LastSize, @TradeTime, @QuoteTime, @HighPrice, @LowPrice, @BidTick, @ClosePrice, @QuoteTimeMs, @TradeTimeMs, @DateTimeKey);";
+                using (IDbConnection cn = Connection)
+                {
+                    try
+                    {
+                        cn.Open();
+                        cn.Execute(sqlCommand, parameters);
+                        cn.Close();
+                    }
+                    catch (Exception exc)
+                    {
+                        Logger.Info(exc.ToString());
+                    }
+                }
+            }
+            catch (Exception exc)
+            {
+                Logger.Info(exc.ToString());
+            }
+        }
+
+
+
         public async Task SetTrackerInactive(int TrackerId, string IsActiveFlag, string HasBeenNotified, string Notes)
         {
             try

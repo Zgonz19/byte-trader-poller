@@ -76,6 +76,34 @@ namespace ByteTraderPoller.Connections
                 Logger.Info(exc.ToString());
             }
         }
+        public async Task<string> GetUserPrinciples()
+        {
+            string output = "";
+            try
+            {
+                var url = $"https://api.tdameritrade.com/v1/userprincipals?fields=streamerSubscriptionKeys%2CstreamerConnectionInfo%2Cpreferences%2CsurrogateIds";
+                var client = new HttpClient();
+                HttpResponseMessage response = null;
+                lock (RefreshTokenLock)
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", RefreshToken.access_token);
+                    // Get the response.
+                    response = client.GetAsync(url).Result;
+                }
+                // Get the response content.
+                HttpContent responseContent = response.Content;
+                // Get the stream of the content.
+                using (var reader = new StreamReader(await responseContent.ReadAsStreamAsync()))
+                {
+                    output = reader.ReadToEndAsync().Result;                
+                }
+            }
+            catch (Exception exc)
+            {
+                Logger.Info(exc.ToString());
+            }
+            return output;
+        }
         public async Task<CandleList> GetLatestMinuteBars(string symbol, DateTime date, bool extendedhours)
         {
             var unixTime = new DateTimeOffset(date).ToUnixTimeMilliseconds();
