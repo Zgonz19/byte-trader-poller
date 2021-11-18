@@ -20,14 +20,16 @@ namespace ByteTraderPoller.Services.AssetMonitoring
         public string Symbol { get; set; }
         public AssetTrackerSetup TrackerSetup { get; set; }
         public AmeritradeApiWrapper ApiWrapper { get; set; }
+        public AlpacaTradingWrapper AlpacaWrapper { get; set; }
         public ByteTraderRepository Repo { get; set; }
         public EmailEngine Emails { get; set; }
-        public AssetTracker(AssetTrackerSetup trackerSetup, AmeritradeApiWrapper apiWrapper, EmailEngine emails, ByteTraderRepository repo) 
+        public AssetTracker(AssetTrackerSetup trackerSetup, AmeritradeApiWrapper apiWrapper, EmailEngine emails, ByteTraderRepository repo, AlpacaKeys alpacaKeys) 
         {
             TrackerSetup = trackerSetup;
             ApiWrapper = apiWrapper;
             Emails = emails;
             Repo = repo;
+            AlpacaWrapper = new AlpacaTradingWrapper(alpacaKeys.AlpacaApiKey, alpacaKeys.AlpacaSecretKey);
         }
         public void InitializeMonitor()
         {
@@ -36,6 +38,17 @@ namespace ByteTraderPoller.Services.AssetMonitoring
                 Thread.Sleep(new TimeSpan(0, 1, 0));
                 CallMinuteBars();
             }
+        }
+
+        public async Task<SellOrderStatus> ExecuteSellOrder(decimal price)
+        {
+            var user = await Repo.GetTradeUser(1);
+            var result = await AlpacaWrapper.ExecuteFullBalanceSell(TrackerSetup.Symbol, TrackerSetup.ShareQuantity, price);
+            if (result != null)
+            {
+                await Repo.UpdateTradeUser(user.UserId, user.RemainingDayTrades, "N");
+            }
+            return result;
         }
         public async void CallMinuteBars()
         {
@@ -71,15 +84,40 @@ namespace ByteTraderPoller.Services.AssetMonitoring
                     var close = NaNToNull(candle.close);
                     if (close >= TrackerSetup.StrikePrice || high >= TrackerSetup.StrikePrice)
                     {
-                        await Emails.SendEmail(TrackerSetup.UserToAlert, $"{TrackerSetup.Symbol} Strike Price Hit {TrackerSetup.StrikePrice} For ID: {TrackerSetup.TrackerId}", $"{TrackerSetup.Symbol} Strike Price Hit {TrackerSetup.StrikePrice} For ID: {TrackerSetup.TrackerId}");
-                        await Repo.SetTrackerInactive(TrackerSetup.TrackerId, "N", "Y", $"{TrackerSetup.Symbol} Strike Price Hit {TrackerSetup.StrikePrice} For ID: {TrackerSetup.TrackerId}");
+                        var result = await ExecuteSellOrder(TrackerSetup.StrikePrice);
+                        var htmlBody = new StringBuilder();
+                        htmlBody.Append($"Cash Balance: {result.AccountBalance} \r\n");
+                        htmlBody.Append($"Market Value: {result.MarketValue}");
+                        string body = htmlBody.ToString();
+                        string subject = $"{TrackerSetup.Symbol} Hit Strike Price {TrackerSetup.StrikePrice}. Sold {TrackerSetup.ShareQuantity} Shares at {result.SellPrice}";
+                        await Emails.SendEmail(TrackerSetup.UserToAlert, body, subject);
+                        await Repo.SetTrackerInactive(TrackerSetup.TrackerId, "N", "Y", $"{TrackerSetup.Symbol} Strike Price Hit {TrackerSetup.StrikePrice}. Sold {TrackerSetup.ShareQuantity} Shares at {result.SellPrice}");
                         TerminateTracker = true;
                         break;
                     }
                     else if (close <= TrackerSetup.StopLoss || low <= TrackerSetup.StopLoss)
                     {
-                        await Emails.SendEmail(TrackerSetup.UserToAlert, $"{TrackerSetup.Symbol} Stop Loss Hit {TrackerSetup.StopLoss} For ID: {TrackerSetup.TrackerId}", $"{TrackerSetup.Symbol} Stop Loss Hit {TrackerSetup.StopLoss} For ID: {TrackerSetup.TrackerId}");
-                        await Repo.SetTrackerInactive(TrackerSetup.TrackerId, "N", "Y", $"{TrackerSetup.Symbol} Stop Loss Hit {TrackerSetup.StopLoss} For ID: {TrackerSetup.TrackerId}");
+                        var result = await ExecuteSellOrder(TrackerSetup.StopLoss);
+                        var htmlBody = new StringBuilder();
+                        htmlBody.Append($"Cash Balance: {result.AccountBalance} \r\n");
+                        htmlBody.Append($"Market Value: {result.MarketValue}");
+                        string body = htmlBody.ToString();
+                        string subject = $"{TrackerSetup.Symbol} Hit Stop Loss {TrackerSetup.StrikePrice}. Sold {TrackerSetup.ShareQuantity} Shares at {result.SellPrice}";
+                        await Emails.SendEmail(TrackerSetup.UserToAlert, body, subject);
+                        await Repo.SetTrackerInactive(TrackerSetup.TrackerId, "N", "Y", $"{TrackerSetup.Symbol} Stop Loss Hit {TrackerSetup.StopLoss}. Sold {TrackerSetup.ShareQuantity} Shares at {result.SellPrice}");
+                        TerminateTracker = true;
+                        break;
+                    }
+                    else if(TrackerSetup.Expiration <= DateTime.Now)
+                    {
+                        var result = await ExecuteSellOrder(close);
+                        var htmlBody = new StringBuilder();
+                        htmlBody.Append($"Cash Balance: {result.AccountBalance} \r\n");
+                        htmlBody.Append($"Market Value: {result.MarketValue}");
+                        string body = htmlBody.ToString();
+                        string subject = $"{TrackerSetup.Symbol} Tracker Expired. Sold {TrackerSetup.ShareQuantity} Shares at {result.SellPrice}";
+                        await Emails.SendEmail(TrackerSetup.UserToAlert,body, subject);
+                        await Repo.SetTrackerInactive(TrackerSetup.TrackerId, "N", "Y", $" Tracker {TrackerSetup.Symbol} Expired. Reached Target Date {TrackerSetup.Expiration}. Sold {TrackerSetup.ShareQuantity} Shares at {result.SellPrice}");
                         TerminateTracker = true;
                         break;
                     }

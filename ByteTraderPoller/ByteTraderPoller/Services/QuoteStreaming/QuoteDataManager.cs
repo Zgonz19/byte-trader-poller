@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using ByteTraderPoller.Connections;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -18,18 +19,18 @@ namespace ByteTraderPoller.Services.QuoteStreaming
             response
         }
         public Dictionary<string, int> QuoteIndex = new Dictionary<string, int>();
-
+        public ByteTraderRepository Repo = new ByteTraderRepository();
         public List<QuoteProcessor> Quotes = new List<QuoteProcessor>();
         public List<Task> QuoteTasks = new List<Task>();
-
+        public AlpacaKeys Keys { get; set; }
         //public List<string> SymbolsActive = new List<string>();
         public List<KeyValuePair<double, List<data>>>QuoteResponses = new List<KeyValuePair<double, List<data>>>();
-        public QuoteDataManager()
+        public QuoteDataManager(AlpacaKeys keys)
         {
-
+            Keys = keys;
         }
 
-        public void ParseQuotes(List<data> data)
+        public async void ParseQuotes(List<data> data)
         {
             var timestamp = data[0].timestamp;
             KeyValuePair<double, List<data>> response = new KeyValuePair<double, List<data>>(timestamp, data);
@@ -40,7 +41,8 @@ namespace ByteTraderPoller.Services.QuoteStreaming
                 {
                     if (!(QuoteIndex.ContainsKey(item.key)))
                     {
-                        var quoteProcessor = new QuoteProcessor(item.key);
+                        var fundamental = await Repo.GetNewestFundamentals(item.key);
+                        var quoteProcessor = new QuoteProcessor(item.key, fundamental.Vol3MonthAvg, fundamental.Vol10DayAvg, Keys.AlpacaApiKey, Keys.AlpacaSecretKey);
                         Quotes.Add(quoteProcessor);
                         var index = Quotes.IndexOf(quoteProcessor);
                         QuoteIndex.Add(item.key, index);
@@ -100,7 +102,7 @@ namespace ByteTraderPoller.Services.QuoteStreaming
                 var jsonString = JsonConvert.SerializeObject(response);
                 var val = JsonConvert.DeserializeObject<List<data>>(jsonString);
                 ParseQuotes(val);
-                Console.WriteLine(jsonString);
+                //Console.WriteLine(jsonString);
             }
             else if (responseType == ResponseType.notify)
             {

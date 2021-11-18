@@ -16,5 +16,6 @@ namespace ByteTraderPoller.Tables
         public string HasBeenNotified { get; set; }
         public string UserToAlert { get; set; }
         public string Notes { get; set; }
+        public int ShareQuantity { get; set; }
     }
 }

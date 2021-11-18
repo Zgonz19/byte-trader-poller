@@ -24,28 +24,87 @@ namespace ByteTraderPoller.Services.QuoteStreaming
         public List<Fields> QuoteTimeHistory = new List<Fields>();
 
         public ByteTraderRepository Repo = new ByteTraderRepository();
+        public EmailEngine Emails = new EmailEngine();
+        public AlpacaTradingWrapper AlpacaWrapper { get; set; }
         public List<QuoteChange> Changes = new List<QuoteChange>();
-        public QuoteProcessor(string symbol)
+
+        public decimal TenDayVolumeAvg { get; set; }
+
+        public bool MidMarketVolumeSurge = false;
+
+        public decimal ThirtyDayVolumeAvg { get; set; }
+
+
+        public List<string> PriceChangeTick = new List<string>();
+
+        public int SequentialUpticks = 0; 
+
+        public Decimal TargetBidAskRatio = (decimal)1.08;
+
+        public QuoteProcessor(string symbol, decimal thirtyDayVolumeAvg, decimal tenDayVolumeAvg, string apiKey, string apiSecret)
         {
             Symbol = symbol;
+            ThirtyDayVolumeAvg = thirtyDayVolumeAvg;
+            TenDayVolumeAvg = tenDayVolumeAvg;
+            AlpacaWrapper = new AlpacaTradingWrapper(apiKey, apiSecret);
         }
 
 
-        public void ScanChangesForAction(QuoteChange changes, content content, double timestamp)
+        public async void ScanChangesForAction(QuoteChange changes, content content, double timestamp)
         {
-            //BidAskRatio:
-            //totalvolume compared to avg 5 day and 10 day
-            //totalvolume compared to closest avg., measure % completion towards avg vs time of day
-            //bid size change
-            //
-            //
-            //implement trade logic to buy assets based on some obsered correlation between volume, bid, ask,
+            var totalBidSizeHistory = BidSizeHistory.Select(e => (decimal)e.Value).ToList().Sum();
+            var totalAskSizeHistory = AskSizeHistory.Select(e => (decimal)e.Value).ToList().Sum();
+            var bidAskRatio = totalBidSizeHistory / totalAskSizeHistory;
+            var currentVolume = (double)TotalVolumeHistory[TotalVolumeHistory.Count - 1].Value;
+            var percentCompleteVolume = (decimal)currentVolume / (decimal)ThirtyDayVolumeAvg;
+            var percentCompleteVolume2 = (decimal)currentVolume / (decimal)TenDayVolumeAvg;
+            var upticks = PriceChangeTick.Select(e => e = "UP").ToList().Count;
+            var downticks = PriceChangeTick.Select(e => e = "DOWN").ToList().Count;
+            if ((percentCompleteVolume >= (decimal)0.55 || percentCompleteVolume2 >= (decimal)0.55) & DateTime.Now.TimeOfDay < new TimeSpan(11, 45, 0))
+            {
+                MidMarketVolumeSurge = true;
+            }
+            if (upticks >= downticks & SequentialUpticks >= 3 & bidAskRatio >= TargetBidAskRatio & MidMarketVolumeSurge)
+            {
+                await Repo.InsertBuySignal(Symbol, upticks, downticks, SequentialUpticks, bidAskRatio, MidMarketVolumeSurge.ToString(), DateTime.Now);
+                AttemptStockPurchase();
+            }
+
+            //if(Symbol == "AMD")
+            //{
+            //    await Repo.InsertBuySignal(Symbol, upticks, downticks, SequentialUpticks, bidAskRatio, MidMarketVolumeSurge.ToString(), DateTime.Now);
+            //    AttemptStockPurchase();
+            //}
         }
 
 
-        public void SaveQuoteData()
+        public async void AttemptStockPurchase()
         {
-            
+            var user = await Repo.GetTradeUser(1);
+            if (user.RemainingDayTrades > 0 & user.LockTrading == "N")
+            {
+                await Repo.UpdateTradeUser(user.UserId, user.RemainingDayTrades, "Y");
+                var lastPrice = (decimal)LastPriceHistory[LastPriceHistory.Count - 1].Value;
+                var result = await AlpacaWrapper.ExecuteFullBalanceBuy(Symbol, lastPrice);
+                if(result != null)
+                {
+                    await Repo.UpdateTradeUser(user.UserId, user.RemainingDayTrades - 1, "Y");
+                    var stopLoss = result.PurchasePrice - (result.PurchasePrice * (decimal)0.025);
+                    var strikePrice = result.PurchasePrice + (result.PurchasePrice * (decimal)0.05);
+                    await Repo.InsertAssetTracker(444, Symbol, stopLoss, strikePrice, DateTime.Now.Date.AddMonths(2), "Y", "N", user.Email, null, result.SharesPurchased);
+                    var htmlBody = new StringBuilder();
+                    htmlBody.Append($"Cash Balance: {result.AccountBalance} \r\n");
+                    htmlBody.Append($"Market Value: {result.MarketValue}");
+                    string body = htmlBody.ToString();
+                    string subject = $"{Symbol} Buy Event Triggered. Purchased {result.SharesPurchased} Shares at {result.PurchasePrice}";
+                    await Emails.SendEmail(user.Email, body, subject);
+
+                }
+                else
+                {
+                    await Repo.UpdateTradeUser(user.UserId, user.RemainingDayTrades, "N");
+                }
+            }
         }
 
         public async void ReceiveQuoteData(content content, double timestamp)
@@ -136,18 +195,58 @@ namespace ByteTraderPoller.Services.QuoteStreaming
                 var currentValue = item.FirstOrDefault(e => e.Timestamp == timestamp);
                 if (currentValue != null && item.Count >= 2)
                 {
-                    var index = item.IndexOf(currentValue);
-                    var previousValue = item[index - 1];
-                    var percentChange = 100 * ((currentValue.Value - previousValue.Value) / previousValue.Value);
-                    var absChange = currentValue.Value - previousValue.Value;
-                    changes.Add(percentChange);
-                    changesAbs.Add(absChange);
+                    try
+                    {
+                        var index = item.IndexOf(currentValue);
+                        var previousValue = item[index - 1];
+                        var absChange = (decimal)currentValue.Value - (decimal)previousValue.Value;
+                        changesAbs.Add(absChange);
+                        try
+                        {
+                            if ((decimal)previousValue.Value != 0)
+                            {
+                                var percentChange = 100 * (((decimal)currentValue.Value - (decimal)previousValue.Value) / (decimal)previousValue.Value);
+                                changes.Add(percentChange);
+                            }
+                            else
+                            {
+                                changes.Add(null);
+                            }
+                        }
+                        catch(Exception exc)
+                        {
+                            changes.Add(null);
+                        }
+                
+                    }
+                    catch (Exception exc)
+                    {
+                        changesAbs.Add(null);
+                    }
                 }
                 else
                 {
                     changes.Add(null);
                     changesAbs.Add(null);
                 }
+            }
+
+            var askPrice = AskPriceHistory.FirstOrDefault(e => e.Timestamp == timestamp);
+            var bidPrice = BidPriceHistory.FirstOrDefault(e => e.Timestamp == timestamp);
+            Decimal? BidAskSpread = null;
+            Decimal? SpreadPercent = null;
+            if(askPrice != null && bidPrice != null)
+            {
+                BidAskSpread = askPrice.Value - bidPrice.Value;
+                SpreadPercent = BidAskSpread / askPrice.Value;
+            }
+
+            Decimal? BidOverAskRatio = null;
+            var askSize = AskSizeHistory.FirstOrDefault(e => e.Timestamp == timestamp);
+            var bidSize = BidSizeHistory.FirstOrDefault(e => e.Timestamp == timestamp);
+            if (askSize != null && bidSize != null)
+            {
+                BidOverAskRatio = (decimal)bidSize.Value / (decimal)askSize.Value;
             }
             var change = new QuoteChange();
             change.ChangeRecorded = DateTime.Now;
@@ -165,8 +264,32 @@ namespace ByteTraderPoller.Services.QuoteStreaming
             change.AskSizeAbs = changesAbs[4];
             change.TotalVolumeAbs = changesAbs[5];
             change.LastSizeAbs = changesAbs[6];
+            change.BidAskSpread = BidAskSpread;
+            change.SpreadPercent = SpreadPercent;
+            change.BidOverAskRatio = BidOverAskRatio;
             change.CurrentTimestamp = timestamp;
+            if (change.LastPriceChange != null)
+            {
+                var priceChange = Decimal.Round((decimal)change.LastPriceChange, 7);
+                if (priceChange != (decimal)0)
+                {
+                    bool positive = priceChange > (decimal)0;
+                    bool negative = priceChange < (decimal)0;
+                    if (positive)
+                    {
+                        SequentialUpticks = SequentialUpticks + 1;
+                        PriceChangeTick.Add("UP");
+                    }
+                    else if (negative)
+                    {
+                        SequentialUpticks = 0;
+                        PriceChangeTick.Add("DOWN");
+                    }
+                }
+            }
+
             Changes.Add(change);
+            Changes = Changes.OrderBy(e => e.CurrentTimestamp).ToList();
             return change;
         }
     }
@@ -194,7 +317,9 @@ namespace ByteTraderPoller.Services.QuoteStreaming
         public Decimal? AskSizeAbs { get; set; }
         public Decimal? TotalVolumeAbs { get; set; }
         public Decimal? LastSizeAbs { get; set; }
-
+        public Decimal? BidAskSpread { get; set; }
+        public Decimal? SpreadPercent { get; set; }
+        public Decimal? BidOverAskRatio { get; set; }   
         public double CurrentTimestamp { get; set; }
     }
 }

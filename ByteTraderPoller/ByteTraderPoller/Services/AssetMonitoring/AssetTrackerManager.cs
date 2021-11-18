@@ -27,44 +27,53 @@ namespace ByteTraderPoller.Services.AssetMonitoring
             EnableMonitor = true;
             var apiKey = await Repo.GetSystemDefault("TDA Api Key");
             var accessToken = await Repo.GetSystemDefault("TDA Access Token");
-
+            var alpacaKeys = await Repo.GetSystemDefault("Alpaca Keys");
+            var alpacaKeyObj = JsonConvert.DeserializeObject<AlpacaKeys>(alpacaKeys.AttributeValue);
+            
             var accessTokenObj = JsonConvert.DeserializeObject<AccessToken>(accessToken.AttributeValue);
             ApiWrapper.InitializeApiWrapper(accessTokenObj, apiKey.AttributeValue);
-            
+            int maxId = 0;
             var assets = await Repo.GetAssetTrackerSetup();
-            var maxId = assets.Max(e => e.TrackerId);
-            var expiredAssets = assets.Where(e => e.Expiration <= DateTime.Now).ToList();
-            foreach(var asset in expiredAssets)
+            if(assets.Count != 0)
             {
-                await Emails.SendEmail(asset.UserToAlert, $" Tracker {asset.Symbol} Expired. Reached Target Date {asset.Expiration.Date} For ID: {asset.TrackerId}", $" Tracker {asset.Symbol} Expired. Reached Target Date {asset.Expiration.Date} For ID: {asset.TrackerId}");
-                await Repo.SetTrackerInactive(asset.TrackerId, "N", "Y", $" Tracker {asset.Symbol} Expired. Reached Target Date {asset.Expiration.Date} For ID: {asset.TrackerId}");
-                assets.Remove(asset);
+                maxId = assets.Max(e => e.TrackerId);
             }
+            
+            //var expiredAssets = assets.Where(e => e.Expiration <= DateTime.Now).ToList();
+            //foreach(var asset in expiredAssets)
+            //{
+            //    await Emails.SendEmail(asset.UserToAlert, $" Tracker {asset.Symbol} Expired. Reached Target Date {asset.Expiration.Date} For ID: {asset.TrackerId}", $" Tracker {asset.Symbol} Expired. Reached Target Date {asset.Expiration.Date} For ID: {asset.TrackerId}");
+            //    await Repo.SetTrackerInactive(asset.TrackerId, "N", "Y", $" Tracker {asset.Symbol} Expired. Reached Target Date {asset.Expiration.Date} For ID: {asset.TrackerId}");
+            //    assets.Remove(asset);
+            //}
             foreach (var asset in assets)
             {
-                var tracker = new AssetTracker(asset, ApiWrapper, Emails, Repo);
+                var tracker = new AssetTracker(asset, ApiWrapper, Emails, Repo, alpacaKeyObj);
                 var task = Task.Run(() => tracker.InitializeMonitor());
                 TrackerTasks.Add(task);
                 ActiveTrackers.Add(tracker);
             }
             int count = 0;
             while (EnableMonitor)
-            {
-                Thread.Sleep(new TimeSpan(0, 5, 0));
+            { 
+                Thread.Sleep(new TimeSpan(0, 1, 0));
                 var CheckAssets = await Repo.GetAssetTrackerSetup();
-                if (CheckAssets.Max(e => e.TrackerId) > maxId)
+                if(CheckAssets.Count != 0)
                 {
-                    var ListToTrack = CheckAssets.Where(e => e.TrackerId > maxId).ToList();
-                    foreach (var asset in ListToTrack)
+                    if (CheckAssets.Max(e => e.TrackerId) > maxId)
                     {
-                        var tracker = new AssetTracker(asset, ApiWrapper, Emails, Repo);
-                        var task = Task.Run(() => tracker.InitializeMonitor());
-                        TrackerTasks.Add(task);
-                        ActiveTrackers.Add(tracker);
+                        var ListToTrack = CheckAssets.Where(e => e.TrackerId > maxId).ToList();
+                        foreach (var asset in ListToTrack)
+                        {
+                            var tracker = new AssetTracker(asset, ApiWrapper, Emails, Repo, alpacaKeyObj);
+                            var task = Task.Run(() => tracker.InitializeMonitor());
+                            TrackerTasks.Add(task);
+                            ActiveTrackers.Add(tracker);
+                        }
+                        maxId = CheckAssets.Max(e => e.TrackerId);
                     }
-                    maxId = CheckAssets.Max(e => e.TrackerId);
                 }
-                if (count >= 4)
+                if (count >= 20)
                 {
                     ApiWrapper.SetRefreshToken();
                     count = 0;

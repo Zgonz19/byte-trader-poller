@@ -16,10 +16,12 @@ namespace ByteTraderPoller.Connections
     {
         public bool LoginSuccess = false;
 
-        public QuoteDataManager QuoteManager = new QuoteDataManager();
-        public AmeritradeWebsocketWrapper()
+        public AlpacaKeys Keys { get; set; }
+        public QuoteDataManager QuoteManager { get; set; }
+        public AmeritradeWebsocketWrapper(AlpacaKeys keys)
         {
-
+            Keys = keys;
+            QuoteManager = new QuoteDataManager(Keys);
         }
 
 
@@ -155,15 +157,25 @@ namespace ByteTraderPoller.Connections
                 }
                 while (ws.State == WebSocketState.Open && LoginSuccess)
                 {
-                    ArraySegment<byte> bytesReceived = new ArraySegment<byte>(new byte[1024]);
-                    WebSocketReceiveResult result = await ws.ReceiveAsync(bytesReceived, CancellationToken.None);
-                    var responseString = Encoding.UTF8.GetString(bytesReceived.Array, 0, result.Count);
-                    var data = JObject.Parse(responseString);
-                    //dynamic data = JsonConvert.DeserializeObject(responseString, typeof(object));
-                    QuoteManager.ReadStreamResponse(data);
-                    //dynamic data = JsonConvert.DeserializeObject(responseString);
-                }
+                    string copyresponse = "";
+                    try
+                    {
+                        ArraySegment<byte> bytesReceived = new ArraySegment<byte>(new byte[5024]);
+                        WebSocketReceiveResult result = await ws.ReceiveAsync(bytesReceived, CancellationToken.None);
+                        var responseString = Encoding.UTF8.GetString(bytesReceived.Array, 0, result.Count);
+                        copyresponse = responseString;
+                        var data = JObject.Parse(responseString);
+                        //dynamic data = JsonConvert.DeserializeObject(responseString, typeof(object));
+                        QuoteManager.ReadStreamResponse(data);
+                        //dynamic data = JsonConvert.DeserializeObject(responseString);
+                    }
+                    catch (Exception exc)
+                    {
+                        var test = copyresponse;
 
+                    }
+                }
+                //send logout requestv
                 //mySock.send(JSON.stringify(request));
             }
         }

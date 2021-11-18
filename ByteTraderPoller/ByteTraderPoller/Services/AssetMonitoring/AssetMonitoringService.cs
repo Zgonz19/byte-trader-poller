@@ -16,7 +16,7 @@ namespace ByteTraderPoller.Services.AssetMonitoring
             ServiceInitializer();
         }
 
-        public async void ServiceInitializer()
+        public void ServiceInitializer()
         {
             while (true)
             {

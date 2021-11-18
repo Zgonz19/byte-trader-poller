@@ -4,6 +4,7 @@ using ByteTraderPoller.Services.QuoteStreaming;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ByteTraderPoller
@@ -28,11 +29,23 @@ namespace ByteTraderPoller
         public async void StartServices()
         {
             var tasks = new List<Task>();
-            //var assetMonitor = new AssetMonitoringService();
+
+            var assetMonitor = new AssetMonitoringService();
             var quoteStreaming = new QuoteStreamingService();
 
-            tasks.Add(quoteStreaming.Initialize());
+            var task1 = Task.Run(() => assetMonitor.Initialize());
+            tasks.Add(task1);
+            var task2 = Task.Run(() => quoteStreaming.Initialize());
+            tasks.Add(task2);
+            //quoteStreaming.Initialize();
+            //assetMonitor.Initialize();
+
+            //tasks.Add(quoteStreaming.Initialize());
             //tasks.Add(assetMonitor.Initialize());
+            while (true)
+            {
+                Thread.Sleep(new TimeSpan(0, 5, 10));
+            }
             await Task.WhenAll(tasks);
             Console.WriteLine("Service Execution Completed");
         }

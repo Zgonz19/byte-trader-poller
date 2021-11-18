@@ -15,7 +15,7 @@ namespace ByteTraderPoller.Services.QuoteStreaming
         }
 
 
-        public async void ServiceInitializer()
+        public void ServiceInitializer()
         {
             while (true)
             {
@@ -31,7 +31,7 @@ namespace ByteTraderPoller.Services.QuoteStreaming
                         break;
                     case DayOfWeek.Saturday:
                     case DayOfWeek.Sunday:
-                        InitializeTrackers(currentTime);
+                        //InitializeTrackers(currentTime);//
                         break;
                 }
                 var now = DateTime.Now;
@@ -45,24 +45,23 @@ namespace ByteTraderPoller.Services.QuoteStreaming
         }
         public void InitializeTrackers(DateTime date)
         {
-            Task.Run(() => StreamingManager.InitializeManager());
             var time = date.TimeOfDay;
             if (time < new TimeSpan(8, 30, 0))
             {
                 Thread.Sleep(new TimeSpan(8, 30, 0) - time);
                 Task.Run(() => StreamingManager.InitializeManager());
                 Thread.Sleep(new TimeSpan(15, 0, 0) - DateTime.Now.TimeOfDay);
-                StreamingManager.EnableMonitor = false;
+                StreamingManager.TdaWebsocket.LoginSuccess = false;
             }
             else if (time >= new TimeSpan(8, 30, 0) && time < new TimeSpan(15, 0, 0))
             {
                 Task.Run(() => StreamingManager.InitializeManager());
                 Thread.Sleep(new TimeSpan(15, 0, 0) - time);
-                StreamingManager.EnableMonitor = false;
+                StreamingManager.TdaWebsocket.LoginSuccess = false;
             }
             else if (time >= new TimeSpan(15, 0, 0))
             {
-                StreamingManager.EnableMonitor = false;
+                StreamingManager.TdaWebsocket.LoginSuccess = false;
             }
         }
     }
